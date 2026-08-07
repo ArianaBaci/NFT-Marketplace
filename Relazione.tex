@@ -1,0 +1,119 @@
+\documentclass{article}
+\usepackage[italian]{babel}
+
+\title{Relazione del Progetto di Sistemi Operativi \\
+\large Strumento Client-Server per la computazione di impronte SHA-256}
+\author{Ariana Baci \\ Corso di Laurea in Informatica \\ Università degli Studi di Verona
+}
+
+\begin{document}
+
+\maketitle
+
+\section{Obiettivi e specifiche implementate}
+
+L'obiettivo del progetto è consentire a diversi client, anche simultanei, di inviare un file e ricevere l'impronta SHA-256 relativa al contenuto.
+
+Per la realizzazione del sistema ho scelto di utilizzare delle FIFO per la comunicazione tra client e server e dei thread concorrenti per la gestione di richieste multiple in parallelo.
+
+\subsection*{Descrizione delle funzionalità implementate}
+
+\begin{enumerate}
+    \item (Punti 1 e 2) \textbf{Server e client che inviano richieste e ricevono risposte}: il server apre una FIFO in lettura, che ciascun client apre in modalità scrittura per inviare la propria richiesta; il client apre una FIFO in lettura, che il thread dedicato alla sua richiesta apre in scrittura per fornire l'impronta SHA al termine della computazione.
+
+    \item Il server istanzia thread distinti per elaborare richieste multiple in modo concorrente.
+
+    \item Le richieste, prima di essere assegnate a un thread, vengono inserite in una lista per poter essere prelevate in ordine di dimensione del file.
+
+    \item Il numero massimo di thread in esecuzione è fissato da una variabile (\texttt{MAX\_THREADS}, in \texttt{common.h}).
+
+    \item Implementazione del caching in memoria delle coppie percorso-hash già servite: una lista cache contiene le coppie percorso-hash già servite (fino a un limite stabilito dalla variabile \texttt{MAX\_CACHE\_ENTRIES}); ogni richiesta viene processata usando l'algoritmo per il calcolo dell'impronta SHA solo se nella cache non è presente la entry corrispondente al percorso del file, altrimenti si restituisce al client direttamente il valore associato.
+
+    \item Richieste multiple simultanee per un dato percorso vengono gestite processando una sola richiesta e attendendo il risultato per le restanti: quando un thread deve calcolare un'impronta, prima di iniziare la computazione inserisce in cache il percorso del file, associandolo a un valore nullo e marcandolo come \texttt{ENTRY\_IN\_PROGRESS}, poi sblocca la cache. In questo modo gli altri thread sono al corrente del fatto che l'impronta per quel file non è ancora in cache ma sta già venendo calcolata da un altro processo.
+
+    \item Implementazione di un ``thread pool'': il server crea \texttt{MAX\_THREADS} thread distinti senza aspettare di ricevere richieste. I thread girano quindi continuamente, processando richieste e verificando la presenza di nuove richieste da servire. In questo modo si evita il sovraccarico dovuto alla creazione e distruzione di thread per ogni richiesta.
+
+    \item Implementazione di un meccanismo di interrogazione della cache delle richieste già processate: i thread interrogano la cache tramite la funzione \texttt{cache\_get\_or\_compute}, che a sua volta chiama \texttt{find\_entry}, la quale scorre le richieste processate cercando la chiave (nome del file) passata come parametro.
+\end{enumerate}
+\section{Struttura del codice}
+Il codice ha una struttura modulare ed è suddiviso in più file, ciascuno dei quali contiene funzioni e strutture dati specifiche per una determinata funzionalità.
+I principali:
+\begin{enumerate}
+    \item src/server.c : contiene il ciclo principale che ascolta le richieste dei client dalla FIFO e le inoltra ai thread
+    \item src/client.c : invia richieste tramite FIFO, sotto forma di file, attende e legge la risposta
+    \item src/digest.c : algoritmo che calcolo dell'hash SHA256 di un file
+    \item src/cache.c : cache delle coppie (percorso, hash) e gestione richieste concorrenti sullo stesso file
+    \item src/threadpool.c : coda delle richieste pendenti e pool di thread worker
+    \item src/errExit.c :gestione centralizzata degli errori fatali
+    \item inc/*.h : dichiarazioni e strutture condivise tra i file sopra
+
+\end{enumerate}
+\section{Flusso di esecuzione}
+Il flusso di esecuzione parte dal lancio del client, a cui viene passato come parametro
+il nome del filedi cui si vuole calcolare l'impronta SHA. Il client comunica la richiesta al server tramite FIFO. Il server, sempre in ascolto, legge
+quanto scritto nella FIFO dai vari client e inoltra le riciheste al threadpool. Ciascun thread, quando riceve una richiesta, consulta 
+la cache, che contiene coppie percorso file - impronta SHA. Se trova il percorso del file richiesto, ne ritorna direttamente il valore di impronta associato, eventualmente attendendo se tale valore non è ancora valido ma un altro thread lo sta calcolando;
+se non lo trova, chiama la funzione digest, che calcola l'impronta a partire dal contenuto del file, e successivamente, nel più dei casi, salva in cache i dati della nuova richiesta servita. Ogni thread infine invia, sempre tramite FIFO, il risultato al client, che lo legge e lo stampa.
+
+\section{Analisi dei moduli e scelte implementative}
+L'organizzazione in moduli del progetto è stata decisa ed elaborata implementando le funzionalità che richiedevano la cache, per rendere il codice più gestibile e comprensibile.
+
+
+\subsection{Server}
+
+Il server crea la fifo con permessi di lettura e scrittura a owner, group e other,
+ definiti da \texttt{FIFO\_PERMISSIONS} 
+in \texttt{common.h}, come anche il percorso
+ (\texttt{'/tmp/server\_fifo'}), noto anche al client.
+Chiama una funzione per inzializzare i thread e apre la propria FIFO in lettura e resta perennemente in ascolto di richieste tramite un ciclo while(1).
+A ogni richiesta ricevuta, calcola la dimensione del file e la inserisce in una struttura dati apposita, insieme alle informazioni ricevute dal client, ovvero percorso per la sua FIFO e nome del file.
+Il server a questo punto non fa che inoltrare la richiesta così pre processata al threadpool.
+
+Per quanto riguarda le difficoltà riscontrate, questo è stato il file che ha subito più modifiche. Con l'aumentare delle
+funzionalità, essendo partita da una base senza cache e threadpool, ho infatti modificato diversi aspetti (ad esempio, all'inizio le richieste erano processate in ordine di arrivo e non di dimensione del file, e in assenza di thread pool venivano mandate direttamente a un thread creato sul momento, senza essere messe in coda e confrontate), e ho deciso di snellire il più possibile questa sezione demandando diverse funzioni ad altri moduli.
+
+\subsection{Client}
+Ciascun client si assicura di aver ricevuto come parametro il nome del file da processare e nient'altro. Crea un proprio percorso univoco per la FIFO tramite \texttt{getpid()} (altrimenti rischierebbe di ricevere la risposta indirizzata a qualche altro processo), e apre la FIFO del server, di cui conosce il patch in quanto dichiarato nel codice, in modalità scrittura.
+Invia al server il nome del file ricevuto da riga di comando e il percorso alla propria FIFO (aperta in lettura), resta 
+quindi in attesa della risposta, che infine stampa.
+
+\subsection{Threadpool}
+
+Nel modulo è presente la funzione \texttt{threadpool\_submit}, chiamata dal server per l'inoltro delle richieste, che salva le richieste in una coda, fino a un limite massimo.
+Ciascun thread esegue continuamente un ciclo nel quale, se la coda delle richieste è vuota, attende, altrimenti sceglie quella col file associato di dimensione più piccola e la manda alla
+cache perchè ne restituisca il risultato. Terminata la computazione svolta dalla cache, apre la fifo del client in scrittura e manda la risposta.
+I thread vengono creati con \texttt{pthread\_create} e immediatamente distaccati tramite \texttt{pthread\_detach}: 
+quindi il server non attende mai la terminazione dei thread, 
+e le risorse di ciascun thread vengono liberate automaticamente al termine della sua esecuzione. Questa scelta è coerente con il modello a thread pool adottato: i thread non terminano mai, quindi una \texttt{pthread\_join} 
+non avrebbe comunque senso, e \texttt{pthread\_detach} serve principalmente a evitare 
+memory leak sulle strutture interne del thread stesso.
+Ho scelto di passare la variabile "hash" come parametro così che le modifiche effettuate dalla cache siamo
+direttamente visibili anche alla funzione chiamante.
+Ho pensato di non mantenere una lista ordiata
+per le richieste ma far cercare a ciascun thread quella più piccola: la complessità è equivalente, infatti in entrambi i casi dovrei fare una scansione lineare per cercare in un caso, per inserire in maniera ordinata nell'altro, per ogni richiesta.
+
+\subsection{Cache}
+La cache viene chiamata dai thread tramite \texttt{cache\_get\_or\_compute}. Usa una coda condivisa protetta da mutex a cui ogni processo accede mutualmente per verificare la presenza di una entry e 
+inserirne una nuova, mentre durante l'operazione di calcolo dell'impronta SHA viene sbloccata così che gli altri thread non debbano attendere durante la chiamata alla funzione che processa effettivamente il contenuto del file.
+Per segnalare che una entry è in fase di computazione ho aggiunto la variabile \texttt{entry\_state\_t} 
+che ne dichiara lo stato, che può essere
+\texttt{ENTRY\_IN\_PROGRESS} oppure \texttt{ENTRY\_READY}.
+Nel caso in cui in cache ci sia già il numero massimo di record, viene cercata randomicamente una entry che non sia dichiarata come \texttt{ENTRY\_IN\_PROGRESS} e sovrascritta.
+Se non viene trovata nessuna entry in stato \texttt{ENTRY\_READY} entro un numero di tentativi pari al numero massimo di record, l'impronta viene calcolata e restituita al client senza essere salvata:
+la scelta è stata fatta per non creare computazioni complesse che richiedessero più tempo di una scansione lineare e allo stesso tempo evitare di preferire sempre la sostituzione delle prime entry della cache.
+\subsection{Digest}
+Il modulo contiene la funzione \texttt{digest}, che calcola l'impronta SHA256 del file passato come parametro.
+Il codice è sostanzialmente analogo a quello fornito dal docente.
+\subsection{common.h}
+Il file contiene le dichiarazioni delle principali strutture dati e costanti utilizzate in tutto il progetto, come ad esempio il numero massimo di thread, il percorso della FIFO del server e i permessi per la creazione della FIFO, al fine di rendere più leggibile il codice e centralizzare le modifiche in caso di necessità.
+
+\section{Test svolti}
+\subsection{Ordine di esecuzione delle richieste}
+Per verificare che le richieste vengano eseguite in ordine di dimensione del file, ho impostato /texttt{MAX\_THREADS} a 1, in modo da consentire che le richieste si accumulino nella cache (altrimenti sarebbero eseguite in ordine di arrivo), e ho poi usato lo script testOrdineEsecuzione.sh, che cera 5 file di 
+diverse dimensioni e lancia 5 client in parallelo, uno per ciascun file. Ho verificato che le risposte ricevute dai client fossero in ordine di dimensione del file, indipendentemente dall'ordine di lancio dei client stessi.
+\subsection{Utilizzo dei dati presenti in cache}
+Per verificare che i processi non calcolino impronte già presenti in cache, pronte o fase di computazione, ho reimpostato /texttt{MAX\_THREADS} a un valore ragionevole >1 e usato lo script in testCaching.sh, che crea un file sufficientemente grande e lancia 15 client in parallelo con la stessa richiesta.
+Ne è risultato che i processi, dopo il primo, che consultano la cache, trovano la entry in stato \texttt{ENTRY\_IN\_PROGRESS} e stampano "waiting for another thread that is already computing hash for file ...", una volta
+che lo stato della entry passa a \texttt{ENTRY\_READY} ciascun thread (eccetto il primo), usa il valore salvato e stampa "using cached hash for file ..."
+
+\end{document}
