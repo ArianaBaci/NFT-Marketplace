@@ -6,11 +6,12 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./DrugNFT.sol";
 
-//eredita reentrancyGuard di openZeppelin per gli attacchireentrancy
+//eredita reentrancyGuard di openZeppelin per gli attacchi reentrancy
 contract DrugMarketplace is ReentrancyGuard {
 
     struct Listing {
         address seller;
+        string drugName;
         uint256 price;
         bool isActive;
     }
@@ -21,6 +22,7 @@ contract DrugMarketplace is ReentrancyGuard {
 
     event DrugListed(
         uint256 indexed tokenId,
+        string drugName,
         address indexed seller,
         uint256 price
     );
@@ -47,7 +49,7 @@ contract DrugMarketplace is ReentrancyGuard {
         drugNFT = DrugNFT(nftAddress);
     }
 
-    // Il proprietario mette in vendita il farmaco: il marketplace registra venditore, prezzo e disponibilità
+    // Il proprietario (il laboratorio) mette in vendita il farmaco: il marketplace registra venditore (produttore), prezzo e disponibilità
     function listDrug(uint256 tokenId, uint256 price) public {
         require(drugNFT.ownerOf(tokenId) == msg.sender, "Not the owner");
         require(price > 0, "Price must be greater than zero");
@@ -59,11 +61,12 @@ contract DrugMarketplace is ReentrancyGuard {
 
         listings[tokenId] = Listing({
             seller: msg.sender,
+            drugName: drugNFT.getDrug(tokenId).name,
             price: price,
             isActive: true
         });
-
-        emit DrugListed(tokenId, msg.sender, price);
+        drugNFT.markAsForSale(tokenId, true);
+        emit DrugListed(tokenId, drugNFT.getDrug(tokenId).name, msg.sender, price);
     }
 
     // L'acquirente compra il farmaco: il marketplace verifica i fondi, trasferisce la proprietà e i fondi
@@ -77,20 +80,22 @@ contract DrugMarketplace is ReentrancyGuard {
         require(listing.isActive, "Listing not active");
         require(msg.sender != listing.seller, "Seller cannot buy");
         require(msg.value >= listing.price, "Insufficient funds");
+        
+        //verifico faemaco non scaduto
         require(
-            drugNFT.ownerOf(tokenId) == listing.seller,
-            "Seller no longer owner"
+            !drugNFT.isExpired(tokenId),
+            "Drug is expired"  
         );
         require(
-            drugNFT.getApproved(tokenId) == address(this) ||
-                drugNFT.isApprovedForAll(listing.seller, address(this)),
-            "Marketplace not approved"
+            !drugNFT.isSold(tokenId),
+            "Drug is already sold"
         );
 
         uint256 price = listing.price;
         address seller = listing.seller;
 
         listing.isActive = false;
+
 
         drugNFT.safeTransferFrom(seller, msg.sender, tokenId);
 
@@ -101,7 +106,8 @@ contract DrugMarketplace is ReentrancyGuard {
             (bool sentToBuyer, ) = payable(msg.sender).call{value: msg.value - price}("");
             require(sentToBuyer, "Refund to buyer failed");
         }
-
+        drugNFT.markAsSold(tokenId, msg.sender);
+        drugNFT.markAsForSale(tokenId, false);
         emit DrugSold(tokenId, seller, msg.sender, price);
     }
 
@@ -113,6 +119,7 @@ contract DrugMarketplace is ReentrancyGuard {
         require(listing.seller == msg.sender, "Only the seller can cancel the listing");
 
         listing.isActive = false;
+        drugNFT.markAsForSale(tokenId, false);
 
         emit ListingCancelled(tokenId);
     }
@@ -135,4 +142,22 @@ contract DrugMarketplace is ReentrancyGuard {
         Listing memory listing = listings[tokenId];
         return (listing.seller, listing.price, listing.isActive);
     }
+    function isListed(uint256 tokenId) public view returns (bool) {
+        Listing memory listing = listings[tokenId];
+        return listing.isActive;
+    }
+    function getPrice(uint256 tokenId) public view returns (uint256) {
+        Listing memory listing = listings[tokenId];
+        require(listing.isActive, "Listing is not active");
+        return listing.price;
+    }
+    function getSeller(uint256 tokenId) public view returns (address) {
+        Listing memory listing = listings[tokenId];
+        return listing.seller;
+    }
+    function getDrugName(uint256 tokenId) public view returns (string memory) {
+        Listing memory listing = listings[tokenId];
+        require(listing.isActive, "Listing is not active");
+        return listing.drugName;
+    }   
 }

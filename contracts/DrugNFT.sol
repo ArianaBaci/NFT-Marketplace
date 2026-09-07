@@ -10,20 +10,59 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 // eredito da ERC721URIStorage e Ownable per limitare la funzione di minting al proprietario del contratto
 contract DrugNFT is ERC721URIStorage, Ownable {
 
-    // definisco uno struct per rappresentare: numero di serie e di lotto, scadenza e produttore del farmaco
-    struct Drug {
-        string serialNumber;
-        string lotNumber;
-        uint256 expirationDate;
-        string manufacturer;
-    }
-    // Definisci l'evento in cima al contratto
+// definisco una struttura per rappresentare il farmaco
+
+ struct Drug {
+    string name;
+    string lotNumber;
+    uint256 productionDate;
+    uint256 expirationDate;
+    address producer;
+    bool forSale;
+    bool sold;
+    address buyer;
+}
+
+address public marketplace;
+
+// Solo il produttore può decidere quale indirizzo è il Marketplace autorizzato.
+function setMarketplace(address _marketplace) external onlyOwner {
+    marketplace = _marketplace;
+}
+
+// controllo che solo il marketplace possa chiamare la funzione markAsSold
+modifier onlyMarketplace() {
+    require(msg.sender == marketplace, "Only marketplace");
+    _; //"_" indica di eseguire il corpo della funzione se il controllo è superato
+}
+
+// solo il marketplace può modificare lo stato "sold" del farmaco e registrare l'acquirente
+function markAsSold(uint256 tokenId, address buyer) external onlyMarketplace
+{
+    require(_ownerOf(tokenId) != address(0), "Token does not exist");
+    require(!drugs[tokenId].sold, "Drug already sold");
+
+    drugs[tokenId].sold = true;
+    drugs[tokenId].buyer = buyer;
+}
+function markAsForSale(uint256 tokenId, bool forSale) external onlyMarketplace
+{
+    require(_ownerOf(tokenId) != address(0), "Token does not exist");
+    require(!drugs[tokenId].sold, "Drug already sold");
+
+    drugs[tokenId].forSale = forSale;
+}
+    // Definisco l'evento in cima al contratto
     event DrugMinted(
         uint256 indexed tokenId,
-        string serialNumber,
+        string name,
         string lotNumber,
-        address indexed recipient,
-        string manufacturer
+        uint256 productionDate,
+        uint256 expirationDate,
+        address producer,
+        bool forSale,
+        bool sold,
+        address buyer
     );
 
     // uso un mapping per associare a ogni id di un farmaco la struct Drug con le info corrispondenti
@@ -33,56 +72,97 @@ contract DrugNFT is ERC721URIStorage, Ownable {
     // variabile privata per registrare l'id del prossimo farmaco mintato
     uint256 private _nextTokenId;
 
-    //costruttore --> eseguito solo una volta 
+    //costruttore -> eseguito solo una volta 
+
     //prende come parametro l'ind di quello che diventa il proprietario del contratto
-    constructor(address initialOwner)
-        ERC721("DrugTraceability", "DRUG") //libreria ERC721 di OpenZeppelin che gestisce gli NFT
-        Ownable(initialOwner) // libreria di OpenZeppelin: prende initialOwner e lo imposta come proprietario del contratto
+    constructor(address producer)
+     //inizializza la parte ERC-721 ereditata da OpenZeppelin assegnando il nome e il simbolo del token
+        ERC721("DrugTraceability", "DRUG")
+        // libreria di OpenZeppelin: prende initialOwner e lo imposta come proprietario del contratto
+        Ownable(producer) 
     {}
 
-    //minting 
+    //minting
 
-    function mintDrugNFT(
-        address to, // wallet del destinatario (ospedale, farmacia, ecc.)
-        string memory uri, // link al metadata remoto JSON del farmaco
-        string memory serialNumber,
-        string memory lotNumber,
-        uint256 expirationDate,
-        string memory manufacturer
-    ) public onlyOwner returns (uint256) { //onlyOwner controllo di corrispondenza indirizzo del proprietario fornito da Ownable
-        uint256 tokenId = _nextTokenId;
-        _nextTokenId++;
-        //safeMint e _setTokenURI fornite da ERC721URIStorage di OpenZeppelin 
-        _safeMint(to, tokenId);
-        _setTokenURI(tokenId, uri);
+   function mintDrugNFT(
+    string memory uri,
+    string memory name,
+    string memory lotNumber,
+    uint256 productionDate,
+    uint256 expirationDate
+) public onlyOwner returns (uint256) {
+    //controlli sulle date e scadenza
+     require(
+        expirationDate > productionDate,
+        "Invalid dates"
+    );
 
-        drugs[tokenId] = Drug(serialNumber, lotNumber, expirationDate, manufacturer);
-        // uso un evento per registrare il minting del farmaco
-        emit DrugMinted(tokenId, serialNumber, lotNumber, to, manufacturer);
+    require(
+        expirationDate > block.timestamp,
+        "Drug already expired"
+    );
+    uint256 tokenId = _nextTokenId;
+    _nextTokenId++;
 
-        return tokenId;
-    }
+    _safeMint(owner(), tokenId);
+
+    _setTokenURI(tokenId, uri);
+
+    drugs[tokenId] = Drug(
+        name,
+        lotNumber,
+        productionDate,
+        expirationDate,
+        owner(),
+        false,
+        false,
+        address(0)
+    );
+
+    emit DrugMinted(
+        tokenId,
+        name,
+        lotNumber,
+        productionDate,
+        expirationDate,
+        owner(),
+        false,
+        false,
+        address(0)
+    );
+
+    return tokenId;
+}
 
     // ritorna serial number, lot number, scadenza e produttore del farmaco
-    function getDrug(uint256 tokenId)
-        public
-        view
-        returns (string memory, string memory, uint256, string memory)
-    {
-        require(exists(tokenId), "Token does not exist");
-        Drug memory drug = drugs[tokenId];
-        return (drug.serialNumber, drug.lotNumber, drug.expirationDate, drug.manufacturer);
-    }
+   function getDrug(uint256 tokenId)
+    public
+    view
+    returns (Drug memory)
+{
+    require(_ownerOf(tokenId) != address(0), "Token does not exist");
 
-    function exists(uint256 tokenId) public view returns (bool) {
-        return _ownerOf(tokenId) != address(0);
-    }
-    //evento per tracciare i passaggi logistici
-    event DrugTransferred(uint256 indexed tokenId, address indexed from, address indexed to, string location);
+    return drugs[tokenId];
+}
 
-    function transferDrug(address to, uint256 tokenId, string memory newLocation) public {
-        require(ownerOf(tokenId) == msg.sender, "Non sei il proprietario del farmaco");
-        safeTransferFrom(msg.sender, to, tokenId);
-        emit DrugTransferred(tokenId, msg.sender, to, newLocation);
-}       
+    function isExpired(uint256 tokenId) public view returns (bool) {
+    require(_ownerOf(tokenId) != address(0), "Token does not exist");
+
+    return block.timestamp >= drugs[tokenId].expirationDate;
+}
+    function isSold(uint256 tokenId) public view returns (bool) {
+    require(_ownerOf(tokenId) != address(0), "Token does not exist");
+
+    return drugs[tokenId].sold;
+
+}
+function lastTokenId() public view returns (uint256) {
+    return _nextTokenId - 1;
+}
+function isForSale(uint256 tokenId) public view returns (bool) {
+    require(_ownerOf(tokenId) != address(0), "Token does not exist");
+
+    return drugs[tokenId].forSale;
+}
+        
 }
