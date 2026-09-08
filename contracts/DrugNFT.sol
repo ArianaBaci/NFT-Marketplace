@@ -30,6 +30,7 @@ function setMarketplace(address _marketplace) external onlyOwner {
     marketplace = _marketplace;
 }
 
+
 // controllo che solo il marketplace possa chiamare la funzione markAsSold
 modifier onlyMarketplace() {
     require(msg.sender == marketplace, "Only marketplace");
@@ -39,7 +40,6 @@ modifier onlyMarketplace() {
 // solo il marketplace può modificare lo stato "sold" del farmaco e registrare l'acquirente
 function markAsSold(uint256 tokenId, address buyer) external onlyMarketplace
 {
-    require(_ownerOf(tokenId) != address(0), "Token does not exist");
     require(!drugs[tokenId].sold, "Drug already sold");
 
     drugs[tokenId].sold = true;
@@ -76,7 +76,7 @@ function markAsForSale(uint256 tokenId, bool forSale) external onlyMarketplace
 
     //prende come parametro l'ind di quello che diventa il proprietario del contratto
     constructor(address producer)
-     //inizializza la parte ERC-721 ereditata da OpenZeppelin assegnando il nome e il simbolo del token
+     //inizializza la parte ERC-721 ereditata da OpenZeppelin assegnando il nome e il simbolo del token (metadati del token)
         ERC721("DrugTraceability", "DRUG")
         // libreria di OpenZeppelin: prende initialOwner e lo imposta come proprietario del contratto
         Ownable(producer) 

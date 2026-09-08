@@ -5,9 +5,10 @@ pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./DrugNFT.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-//eredita reentrancyGuard di openZeppelin per gli attacchi reentrancy
-contract DrugMarketplace is ReentrancyGuard {
+//Eredita reentrancyGuard di openZeppelin per gli attacchi reentrancy
+contract DrugMarketplace is ReentrancyGuard, Ownable {
 
     struct Listing {
         address seller;
@@ -18,7 +19,27 @@ contract DrugMarketplace is ReentrancyGuard {
 
     mapping(uint256 => Listing) private listings;
 
-    DrugNFT public immutable drugNFT;
+    DrugNFT public drugNFT;
+
+    //imposto indirizzo del contratto drugNFT con cui il marketplace è 
+    //collegato (per semplicità uno solo)
+
+    address drugProducerAddress=address(0);
+    
+    constructor() Ownable(msg.sender) {}
+
+    //al momento per semplicità è specifico per un contratto ma può essere esteso per supportane diversi
+
+    function setDrugNFT(address nftAddress) external onlyOwner {
+
+        drugNFT = DrugNFT(nftAddress);
+        drugProducerAddress=nftAddress;
+    }
+    //reimposta a address(0) il contratto affiliato
+    function unSetDrugNFT() external onlyOwner {
+        drugNFT = DrugNFT(address(0));
+        drugProducerAddress=address(0);
+    }
 
     event DrugListed(
         uint256 indexed tokenId,
@@ -43,20 +64,14 @@ contract DrugMarketplace is ReentrancyGuard {
         uint256 newPrice
     );
 
-    //passo al costruttore l'indirizzo del contratto NFT
-    constructor(address nftAddress) {
-    //qui faccio il cast dell'indirizzo del contratto NFT
-        drugNFT = DrugNFT(nftAddress);
-    }
-
     // Il proprietario (il laboratorio) mette in vendita il farmaco: il marketplace registra venditore (produttore), prezzo e disponibilità
+    
     function listDrug(uint256 tokenId, uint256 price) public {
+        //controlla che chi carica l'annuncio sia il prorpietario del farmaco
         require(drugNFT.ownerOf(tokenId) == msg.sender, "Not the owner");
         require(price > 0, "Price must be greater than zero");
-        require(
-            drugNFT.getApproved(tokenId) == address(this) ||
-                drugNFT.isApprovedForAll(msg.sender, address(this)),
-            "Marketplace not approved"
+        require(address(this)==drugNFT.marketplace(),
+           "Marketplace not approved"
         );
 
         listings[tokenId] = Listing({
@@ -68,6 +83,7 @@ contract DrugMarketplace is ReentrancyGuard {
         drugNFT.markAsForSale(tokenId, true);
         emit DrugListed(tokenId, drugNFT.getDrug(tokenId).name, msg.sender, price);
     }
+
 
     // L'acquirente compra il farmaco: il marketplace verifica i fondi, trasferisce la proprietà e i fondi
     function buyDrug(uint256 tokenId)
@@ -81,7 +97,7 @@ contract DrugMarketplace is ReentrancyGuard {
         require(msg.sender != listing.seller, "Seller cannot buy");
         require(msg.value >= listing.price, "Insufficient funds");
         
-        //verifico faemaco non scaduto
+        //verifico farmaco non scaduto
         require(
             !drugNFT.isExpired(tokenId),
             "Drug is expired"  
