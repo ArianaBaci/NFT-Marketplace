@@ -1,10 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1788515207.19446 "/Users/aria/Desktop/Marketplace NFT/Relazione.tex" "Relazione.pdf" "Relazione" 1788515207.34843 0
-  "/Users/aria/Desktop/Marketplace NFT/Relazione.tex" 1788515206.97958 1998 a40d5df716700f050914e5c303ac7b7e ""
-  "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/public/cm/cmbx12.tfm" 1136768653 1324 c910af8c371558dc20f2d7822f66fe64 ""
-  "/usr/local/texlive/2026basic/texmf-dist/fonts/tfm/public/cm/cmr12.tfm" 1136768653 1288 655e228510b4c2a1abe905c368440826 ""
-  "/usr/local/texlive/2026basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb" 1248133631 32080 340ef9bf63678554ee606688e7b5339d ""
-  "/usr/local/texlive/2026basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb" 1248133631 35752 024fb6c41858982481f6968b5fc26508 ""
+["pdflatex"] 1788971673.63379 "/Users/aria/Desktop/Marketplace NFT/Relazione.tex" "Relazione.pdf" "Relazione" 1788971673.76275 2
+  "/Users/aria/Desktop/Marketplace NFT/Relazione.tex" 1788971673.0656 1919 fad4a96cb2b4604f9b457222293d2a6c ""
   "/usr/local/texlive/2026basic/texmf-dist/tex/generic/babel-italian/italian.ldf" 1768510595 11544 73e1a196f9cb1197c32a45aa6e9ead35 ""
   "/usr/local/texlive/2026basic/texmf-dist/tex/generic/babel/babel.sty" 1771111869 147019 f2ca437186bfeb562e1066ad59426a04 ""
   "/usr/local/texlive/2026basic/texmf-dist/tex/generic/babel/locale/it/babel-it.ini" 1663444672 4255 d2c36ede3f04f7968d64917327cbb37a ""
@@ -13,13 +9,11 @@
   "/usr/local/texlive/2026basic/texmf-dist/tex/latex/base/article.cls" 1748806692 20144 b966087dda3b194755eb460d32e2ef75 ""
   "/usr/local/texlive/2026basic/texmf-dist/tex/latex/base/size10.clo" 1748806692 8448 686612a86f0e04f41ea577f5ec7e83d8 ""
   "/usr/local/texlive/2026basic/texmf-dist/tex/latex/etoolbox/etoolbox.sty" 1759437024 46885 8953c67ffba03252c6090aa19568b8ba ""
-  "/usr/local/texlive/2026basic/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def" 1761248321 30662 bfd6e864f4ffc5018b0e2b6260c3181c ""
   "/usr/local/texlive/2026basic/texmf-dist/web2c/texmf.cnf" 1770478701 43630 e9fa012910491fe5ae08a72c3c2997a7 ""
-  "/usr/local/texlive/2026basic/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1782837608 79187 e3f5941707347d15c1721f52279213a2 ""
   "/usr/local/texlive/2026basic/texmf-var/web2c/pdftex/pdflatex.fmt" 1782837574 2966192 b0c06bb9fd2ce5b21d4232f80d2a6c17 ""
   "/usr/local/texlive/2026basic/texmf.cnf" 1772405582 628 bbc09d6d38872d53c11bb48dc9b14e88 ""
-  "Relazione.aux" 1788515207.33004 484 9681f5a2f10b921dd655252f1f2b1076 "pdflatex"
-  "Relazione.tex" 1788515206.97958 1998 a40d5df716700f050914e5c303ac7b7e ""
+  "Relazione.aux" 1788971665.63308 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+  "Relazione.tex" 1788971673.0656 1919 fad4a96cb2b4604f9b457222293d2a6c ""
   (generated)
   "Relazione.aux"
   "Relazione.log"
