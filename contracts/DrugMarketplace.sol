@@ -1,15 +1,11 @@
-//Marketplace: gestisce solo farmaci registrati in DrugNFT.sol, permettendo a un proprietario di mettere in vendita farmaci, a un acquirente di comprarli e a un venditore di ritirare l'annuncio o modificare il prezzo.
-
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./DrugNFT.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-
 //Eredita reentrancyGuard di openZeppelin per gli attacchi reentrancy
 contract DrugMarketplace is ReentrancyGuard, Ownable {
-
     struct Listing {
         address seller;
         string drugName;
@@ -20,25 +16,17 @@ contract DrugMarketplace is ReentrancyGuard, Ownable {
     mapping(uint256 => Listing) private listings;
 
     DrugNFT public drugNFT;
-
-    //imposto indirizzo del contratto drugNFT con cui il marketplace è 
-    //collegato (per semplicità uno solo)
-
-    address drugProducerAddress=address(0);
     
     constructor() Ownable(msg.sender) {}
 
-    //al momento per semplicità è specifico per un contratto ma può essere esteso per supportane diversi
+    //al momento per semplicità il marketplace è specifico per un contratto drugNFT ma può essere esteso per supportane diversi
 
     function setDrugNFT(address nftAddress) external onlyOwner {
-
         drugNFT = DrugNFT(nftAddress);
-        drugProducerAddress=nftAddress;
     }
     //reimposta a address(0) il contratto affiliato
     function unSetDrugNFT() external onlyOwner {
         drugNFT = DrugNFT(address(0));
-        drugProducerAddress=address(0);
     }
 
     event DrugListed(
@@ -64,16 +52,15 @@ contract DrugMarketplace is ReentrancyGuard, Ownable {
         uint256 newPrice
     );
 
-    // Il proprietario (il laboratorio) mette in vendita il farmaco: il marketplace registra venditore (produttore), prezzo e disponibilità
-    
+    //funzione utilizzabile solo dal proprietario del farmaco per caricare l'annuncio    
     function listDrug(uint256 tokenId, uint256 price) public {
-        //controlla che chi carica l'annuncio sia il prorpietario del farmaco
+        //controlli: sender==proprietario, prezzo>0, marketplace effettivamente abilitato
         require(drugNFT.ownerOf(tokenId) == msg.sender, "Not the owner");
         require(price > 0, "Price must be greater than zero");
         require(address(this)==drugNFT.marketplace(),
            "Marketplace not approved"
         );
-
+        //il nome si può non specificare per comodità
         listings[tokenId] = Listing({
             seller: msg.sender,
             drugName: drugNFT.getDrug(tokenId).name,
@@ -84,34 +71,33 @@ contract DrugMarketplace is ReentrancyGuard, Ownable {
         emit DrugListed(tokenId, drugNFT.getDrug(tokenId).name, msg.sender, price);
     }
 
-
-    // L'acquirente compra il farmaco: il marketplace verifica i fondi, trasferisce la proprietà e i fondi
+    // Funzione per acquistare il farmaco: questa può essere usata da qualunque client diverso dal proprietario
     function buyDrug(uint256 tokenId)
-        public
+        external
         payable
         nonReentrant
-    {
+    {   
         Listing storage listing = listings[tokenId];
-
-        require(listing.isActive, "Listing not active");
-        require(msg.sender != listing.seller, "Seller cannot buy");
-        require(msg.value >= listing.price, "Insufficient funds");
+        uint256 price = listing.price;
+        address seller = listing.seller;
+        //verifiche: farmaco non scaduto, annuncio attivo, buyer diverso dal proprietario stesso, fondi sufficienti
         
-        //verifico farmaco non scaduto
         require(
             !drugNFT.isExpired(tokenId),
             "Drug is expired"  
         );
+        require(listing.isActive, "Listing not active");
+        require(msg.sender != seller, "Seller cannot buy");
+        require(msg.value >= price, "Insufficient funds");
         require(
-            !drugNFT.isSold(tokenId),
-            "Drug is already sold"
+            drugNFT.isForSale(tokenId),
+            "Drug is not available "
         );
-
-        uint256 price = listing.price;
-        address seller = listing.seller;
 
         listing.isActive = false;
 
+        drugNFT.markAsSold(tokenId, msg.sender);
+        drugNFT.markAsForSale(tokenId, false);
 
         drugNFT.safeTransferFrom(seller, msg.sender, tokenId);
 
@@ -122,12 +108,11 @@ contract DrugMarketplace is ReentrancyGuard, Ownable {
             (bool sentToBuyer, ) = payable(msg.sender).call{value: msg.value - price}("");
             require(sentToBuyer, "Refund to buyer failed");
         }
-        drugNFT.markAsSold(tokenId, msg.sender);
-        drugNFT.markAsForSale(tokenId, false);
+       
         emit DrugSold(tokenId, seller, msg.sender, price);
     }
 
-    // Il venditore ritira l'annuncio: viene rimosso e il farmaco non è più disponibile
+    // Funzione per ritirare l'annuncio, utilizzabile solo dal proprietario (utile ad esempio in caso di scadenza..)
     function cancelListing(uint256 tokenId) public {
         Listing storage listing = listings[tokenId];
 
@@ -140,7 +125,7 @@ contract DrugMarketplace is ReentrancyGuard, Ownable {
         emit ListingCancelled(tokenId);
     }
 
-    // Il venditore modifica il prezzo
+    // Funzione per modificare il prezzo, utilizzabile solo dal proprietario
     function updatePrice(uint256 tokenId, uint256 newPrice) public {
         Listing storage listing = listings[tokenId];
 
@@ -152,28 +137,17 @@ contract DrugMarketplace is ReentrancyGuard, Ownable {
 
         emit PriceUpdated(tokenId, newPrice);
     }
-
-    // Ritorna venditore, prezzo e disponibilità del farmaco
-    function getListing(uint256 tokenId) public view returns (address, uint256, bool) {
+    //FUNZIONI ACCESSORIE
+    function getListing(uint256 tokenId) public view returns (address, string memory, uint256, bool) {
         Listing memory listing = listings[tokenId];
-        return (listing.seller, listing.price, listing.isActive);
-    }
-    function isListed(uint256 tokenId) public view returns (bool) {
-        Listing memory listing = listings[tokenId];
-        return listing.isActive;
+        return (listing.seller, listing.drugName, listing.price, listing.isActive);
     }
     function getPrice(uint256 tokenId) public view returns (uint256) {
         Listing memory listing = listings[tokenId];
-        require(listing.isActive, "Listing is not active");
         return listing.price;
     }
     function getSeller(uint256 tokenId) public view returns (address) {
         Listing memory listing = listings[tokenId];
         return listing.seller;
-    }
-    function getDrugName(uint256 tokenId) public view returns (string memory) {
-        Listing memory listing = listings[tokenId];
-        require(listing.isActive, "Listing is not active");
-        return listing.drugName;
-    }   
+    } 
 }

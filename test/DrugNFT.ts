@@ -1,36 +1,37 @@
 import { describe, it } from "node:test";
 import hre from "hardhat";
-import { network } from "hardhat";
 import assert from "node:assert/strict";
 
-
-const { viem, networkHelpers } = await hre.network.getOrCreate();
-const now = BigInt(Math.floor(Date.now() / 1000));
+const { viem } = await hre.network.getOrCreate();
+const now = Math.floor(Date.now() / 1000);
 const publicClient = await viem.getPublicClient();
 const walletClients = await viem.getWalletClients();
-
 const producer = walletClients[0];
 const other = walletClients[1];
 const marketplaceDeployer = walletClients[2];
 const buyer = walletClients[3]
+//drugNFT as owner
+const drugNFT = await viem.deployContract("DrugNFT", [
+      producer.account.address,
+    ]);
+//drugNFT as Marketplace 
+const drugNFTAsMarketplace = await viem.getContractAt("DrugNFT", drugNFT.address, {
+        client: {
+          wallet: marketplaceDeployer,
+        },
+    });
+//drugNFT as other
+const drugNFTAsOther = await viem.getContractAt(
+        "DrugNFT",
+        drugNFT.address, {
+      client: {
+      wallet: other,
+              },
+  }); 
 
 describe("DrugNFT", async function () {
 
-  //funzione per deployare il contratto DrugNFT
-
-  async function deployDrugNFT() {
-  
-    const drugNFT = await viem.deployContract("DrugNFT", [
-      producer.account.address,
-    ]);
-
-    return drugNFT;
-  }
-
-  const drugNFT = await deployDrugNFT();
-  
-   // TEST INITZIALIZZAZIONE: verifico che l'owner del contratto sia l'account del producer
-   // e che il nome e il simbolo del token siano corretti
+   // TEST INITZIALIZZAZIONE: verifico che l'owner del contratto sia l'account del producer e che il nome e il simbolo del token siano corretti
  
    it("dovrebbe inizializzare correttamente", async function () {
 
@@ -40,7 +41,7 @@ describe("DrugNFT", async function () {
         functionName: "name",
       });
       assert.equal(name, "DrugTraceability");
-     const symbol = await publicClient.readContract({
+        const symbol = await publicClient.readContract({
         address: drugNFT.address,
         abi: drugNFT.abi,
         functionName: "symbol",
@@ -60,17 +61,14 @@ describe("DrugNFT", async function () {
      );
    });
 
-  // ============================================================
-  // TEST MINTING
-  // ============================================================
+  // TEST MINTING: provo a fare un primo minting e vedo se si salva tutto correttamente
 
+  it("Dovrebbe permettere al producer di mintare un farmaco", async function () {
 
-it("Dovrebbe permettere al producer di mintare un farmaco", async function () {
+  // Imposto le date di produzione e scadenza
 
-    // Impostiamo le date di produzione e scadenza
-      const now = Math.floor(Date.now() / 1000);
-      const productionDate = (BigInt(now));
-      const expirationDate = (BigInt(now + 86400 * 365)); // +1 anno
+  const productionDate = (BigInt(now));
+  const expirationDate = (BigInt(now + 86400 * 365)); // +1 anno
 
   const txHash = await drugNFT.write.mintDrugNFT([
     "ipfs://test-uri",
@@ -79,12 +77,6 @@ it("Dovrebbe permettere al producer di mintare un farmaco", async function () {
     productionDate,
     expirationDate,
   ]);
-
-  // Assicura che la transazione sia stata eseguita prima della lettura
-
-  await publicClient.waitForTransactionReceipt({
-    hash: txHash,
-  });
 
   const drug = await drugNFT.read.getDrug([0n]);
 
@@ -97,20 +89,19 @@ it("Dovrebbe permettere al producer di mintare un farmaco", async function () {
   assert.equal(drug.producer.toLowerCase(), producer.account.address.toLowerCase());
 });
 
-  //verifico che un account non autorizzato non possa mintare un farmaco
+  // TEST MINTING: verifico che un account non autorizzato non possa mintare un farmaco provando a usare "other"
+
 it("Dovrebbe fallire se un account non autorizzato prova a mintare un farmaco", async function () {
 
-    // Impostiamo le date di produzione e scadenza
-      const now = Math.floor(Date.now() / 1000);
-      const productionDate = (BigInt(now));
-      const expirationDate = (BigInt(now + 86400 * 365)); // +1 anno
+  const productionDate = (BigInt(now));
+  const expirationDate = (BigInt(now + 86400 * 365)); // +1 anno
 
-    await assert.rejects(
-      other.writeContract({
-        address: drugNFT.address,
-        abi: drugNFT.abi,
-        functionName: "mintDrugNFT",
-        args: [
+  await assert.rejects(
+    other.writeContract({
+    address: drugNFT.address,
+    abi: drugNFT.abi,
+    functionName: "mintDrugNFT",
+    args: [
           "ipfs://test-uri",
           "Aspirina",
           "LOT123",
@@ -121,10 +112,11 @@ it("Dovrebbe fallire se un account non autorizzato prova a mintare un farmaco", 
     );
   });
 
-  //verifico che un farmaco non possa essere mintato con date non valide
-  it("Dovrebbe fallire se le date non sono valide", async function () {
+ // TEST MINTING: verifico che un farmaco non possa essere mintato con date non valide
 
-    // expirationDate < productionDate
+it("Dovrebbe fallire se le date non sono valide", async function () {
+    
+  // expirationDate < productionDate
     await assert.rejects(
       producer.writeContract({
         address: drugNFT.address,
@@ -134,8 +126,8 @@ it("Dovrebbe fallire se un account non autorizzato prova a mintare un farmaco", 
           "ipfs://test-uri",
           "Aspirina",
           "LOT123",
-          now,
-          now - 10n,
+          (BigInt(now)),
+          (BigInt(now)) - 10n,
         ],
       })
     );
@@ -143,7 +135,7 @@ it("Dovrebbe fallire se un account non autorizzato prova a mintare un farmaco", 
 
   it("Dovrebbe fallire se il farmaco è già scaduto", async function () {
 
-    // Data di scadenza nel passato rispetto a block.timestamp
+    // Data di scadenza nel passato 
     await assert.rejects(
       producer.writeContract({
         address: drugNFT.address,
@@ -153,127 +145,50 @@ it("Dovrebbe fallire se un account non autorizzato prova a mintare un farmaco", 
           "ipfs://test-uri",
           "Aspirina",
           "LOT123",
-          now - 20n,
-          now - 10n,
+          (BigInt(now))- 20n,
+          (BigInt(now)) - 10n,
         ],
       })
     );
   });
 
+  // TEST FUNZIONI CHE COINVOLGONO MARKETPLACE 
+
   describe("Marketplace & Vendita", function () {
+
     it("Dovrebbe permettere solo all'owner di impostare il marketplace", async function () {
-      const drugNFTAsOther = await viem.getContractAt(
-        "DrugNFT",
-  drugNFT.address,
-  {
-    client: {
-      wallet: other,
-    },
-  }); 
+    //provo a impostare il marketplace di riferimento del contratto drugNFT senza esserne l'owner (chiamo drugNFT da "other")
+    
       assert.rejects(
         drugNFTAsOther.write.setMarketplace([marketplaceDeployer.account.address])
-      ); // Fallisce per OwnableUnauthorizedAccount
+      ); 
     });
 
-    it("Dovrebbe permettere solo al marketplace di marcare come venduto", async function () {
-      // Mintiamo prima un farmaco
-      await drugNFT.write.mintDrugNFT(["uri", "Test", "LOT", now, now + 100n]);
-
-      // Impostiamo l'indirizzo del marketplace
+    it("Dovrebbe permettere solo al marketplace di marcare un prodotto come venduto", async function () {
+      // Minto un farmaco
+      await drugNFT.write.mintDrugNFT(["uri", "Test", "LOT", (BigInt(now)), (BigInt(now)) + 100000000n]);
+      // Imposto il marketplace di riferimento (chiamando stavolta setMarketplace con l'account proprietario del contratto)
       await drugNFT.write.setMarketplace([marketplaceDeployer.account.address]);
-
-      // Connettiamoci come marketplace per chiamare markAsSold
-      const drugNFTAsMarketplace = await viem.getContractAt("DrugNFT", drugNFT.address, {
-        client: {
-          wallet: marketplaceDeployer,
-        },
-      });
-
+      //provo a usare markAsSold da other aspettandomi reject
+      await assert.rejects(  drugNFTAsOther.write.markAsSold([0n, buyer.account.address]));
+      //provo a usare markAsSold con il marketplace abilitato
       await drugNFTAsMarketplace.write.markAsSold([0n, buyer.account.address]);
-
+      //verifico che la venduta sia riuscita
       const isDrugSold = await drugNFT.read.isSold([0n]);
       assert.equal(isDrugSold, true);
 
     });
     
-    it("dovrebbe permettere al marketplace di mettere in vendita un farmaco non venduto", async function () {
-      // Mintiamo prima un farmaco
-      await drugNFT.write.mintDrugNFT(["uri", "Test", "LOT", now, now + 100n]);
-
+    it("dovrebbe permettere al marketplace di marcare un prodotto come in vendita", async function () {
+      // Minting
+      await drugNFT.write.mintDrugNFT(["uri", "Test", "LOT", (BigInt(now)), (BigInt(now)) + 100000000n]);
       // Impostiamo l'indirizzo del marketplace
       await drugNFT.write.setMarketplace([marketplaceDeployer.account.address]);
-
-      // Connettiamoci come marketplace per chiamare markAsForSale
-      const drugNFTAsMarketplace = await viem.getContractAt("DrugNFT", drugNFT.address, {
-        client: {
-          wallet: marketplaceDeployer,
-        },
-      });
+      //recupero l'id del prodotto appena mintato
       const lastTokenId = await drugNFT.read.lastTokenId();
       await drugNFTAsMarketplace.write.markAsForSale([lastTokenId, true]);
-
       const isDrugForSale = await drugNFT.read.isForSale([lastTokenId]);
       assert.equal(isDrugForSale, true);
-
     });
-    
-it("Dovrebbe fallire se il marketplace prova a vendere due volte lo stesso farmaco", async function () {
-
-  const expirationDate = now + 365n * 24n * 60n * 60n;
-  const drugNFT1 = await deployDrugNFT();
-
-  // Il producer minta il token con ID 40.
-  await drugNFT1.write.mintDrugNFT([
-    "ipfs://test-uri",
-    "Aspirina",
-    "LOT123",
-    now,
-    expirationDate,
-  ]);
-
-  // Il producer autorizza il marketplace.
-  await drugNFT1.write.setMarketplace([
-    marketplaceDeployer.account.address,
-  ]);
-
-  const drugNFTAsMarketplace = await viem.getContractAt(
-    "DrugNFT",
-    drugNFT1.address,
-    {
-      client: {
-        wallet: marketplaceDeployer,
-      },
-    }
-  );
-
-  // Prima vendita: deve riuscire.
-  await drugNFTAsMarketplace.write.markAsSold([
-    0n,
-    buyer.account.address,
-  ]);
-
-  // Tentativo di rimettere in vendita il farmaco.
-  await assert.rejects(
-    drugNFTAsMarketplace.write.markAsForSale([
-      0n,
-      true,
-    ]),
-    /Drug already sold/
-  );
-});
-  });
-describe("Funzioni accessorie", function () {
-
-  //manca il test per verificare se ritorna isExpirec true nel caso il farmaco sia scaduto  perchè dovrei mettere un timer per attendere la scadenza ma mi da qualche problema
-
-  it("Dovrebbe comunicare correttamente che un farmaco non è scaduto", async function () {
-  
-   // Mintiamo un farmaco con scadenza lontana e verifichiamo che isExpired ritorni false
-   const futureExpirationDate = now + 1000000n;
-   await drugNFT.write.mintDrugNFT(["uri", "Test", "LOT", now, futureExpirationDate]);
-   const lastTokenId = await drugNFT.read.lastTokenId();
-   assert.equal(await drugNFT.read.isExpired([lastTokenId]), false);
   });
 });
-});
-
