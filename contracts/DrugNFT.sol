@@ -16,6 +16,8 @@ contract DrugNFT is ERC721URIStorage, Ownable {
     bool sold;
     address buyer;
 }
+// uso un mapping per associare a ogni id di un farmaco la struct Drug con le info corrispondenti
+mapping(uint256 => Drug) private drugs;
 address public marketplace;
 
 // EVENTO DRUGMINTED che si verifica a ogni minting
@@ -30,8 +32,7 @@ event DrugMinted(
         bool sold,
         address buyer
     );
-    // uso un mapping per associare a ogni id di un farmaco la struct Drug con le info corrispondenti
-    mapping(uint256 => Drug) private drugs;
+  
     // variabile privata per registrare l'id del prossimo farmaco mintato
     uint256 private _nextTokenId;
     //costruttore -> eseguito solo una volta e prende come parametro l'ind di quello che diventa il proprietario del contratto

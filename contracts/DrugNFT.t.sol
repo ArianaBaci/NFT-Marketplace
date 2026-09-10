@@ -19,11 +19,6 @@ contract DrugNFTTest is Test {
         drugNFT = new DrugNFT(producer);
     }
 
-    // Test sul Deployment
-    function test_CorrectOwner() public view {
-        assertEq(drugNFT.owner(), producer);
-    }
-
     // Test sul Minting (Successo)
     function test_MintDrugNFT_Success() public {
         // vm.prank indica a Foundry che la PROSSIMA chiamata sarà fatta dal producer
