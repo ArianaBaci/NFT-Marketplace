@@ -93,6 +93,7 @@ The current implementation supports one producer and one NFT contract. A future 
 
 ## Project Structure
 
+```text
 ├── contracts/
 │   ├── DrugNFT.sol
 │   ├── DrugMarketplace.sol
@@ -106,6 +107,7 @@ The current implementation supports one producer and one NFT contract. A future 
 ├── hardhat.config.ts
 ├── package.json
 └── README.md
+```
 
 
 ## Installation
