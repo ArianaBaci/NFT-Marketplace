@@ -75,13 +75,14 @@ contract DrugMarketplace is ReentrancyGuard, Ownable {
     function buyDrug(uint256 tokenId)
         external
         payable
-        nonReentrant
+        nonReentrant // implementa il mutex pattern 
     {   
         Listing storage listing = listings[tokenId];
         uint256 price = listing.price;
         address seller = listing.seller;
         //verifiche: farmaco non scaduto, annuncio attivo, buyer diverso dal proprietario stesso, fondi sufficienti
-        
+        // CHECK-EFFECT INTERACTION PATTERN: Anche se togliessi "nonReentrant", l'attacco fallirebbe comunque per "listing.isActive=false" impostato prima dei trasferimenti. 
+        //Un eventuale altro tentativo di acquisto verrebbe bloccato dal require(listing.isActive)
         require(
             !drugNFT.isExpired(tokenId),
             "Drug is expired"  
