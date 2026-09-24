@@ -1,57 +1,134 @@
-# Sample Hardhat 3 Project (`node:test` and `viem`)
+# Drug Traceability NFT Marketplace
 
-This project showcases a Hardhat 3 project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
+A blockchain-based NFT marketplace for tracking the authenticity and provenance of pharmaceutical products.
 
-To learn more about Hardhat 3, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3](https://hardhat.org/hardhat3-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+## Overview
 
-## Project Overview
+The project models a simplified pharmaceutical supply chain in which each pharmaceutical product is represented by a unique NFT.
 
-This example project includes:
+The system is composed of two smart contracts:
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+- `DrugNFT.sol`: creates and manages NFTs representing pharmaceutical products.
+- `DrugMarketplace.sol`: manages listings and purchases of pharmaceutical NFTs.
 
-## Usage
+The purpose of the project is to demonstrate how blockchain technology can be used to improve product traceability and authenticity.
 
-### Running Tests
+Each NFT is associated with information such as:
 
-To run all the tests in the project, execute the following command:
+- Product name
+- Lot number
+- Production date
+- Expiration date
+- Producer
+- Current owner
+- Sale status
 
-```shell
+Since the information is stored on-chain, the product history cannot be modified retroactively by a centralized entity. The uniqueness of each NFT also prevents the reuse of product identifiers within the system.
+
+> This project is an educational prototype and does not represent a complete production-ready pharmaceutical traceability system.
+
+## Architecture
+
+### `DrugNFT.sol`
+
+`DrugNFT` is an ERC-721 smart contract based on OpenZeppelin contracts.
+
+It extends:
+
+- `ERC721URIStorage`, for NFT metadata management
+- `Ownable`, to restrict administrative operations to the producer
+
+### Main functions
+
+- `mintDrugNFT(...)`
+- `setMarketplace(...)`
+- `markAsForSale(...)`
+- `markAsSold(...)`
+- `getDrug(...)`
+- `isExpired(...)`
+- `isSold(...)`
+- `isForSale(...)`
+
+Minting is restricted to the contract owner through the `onlyOwner` modifier.
+
+The marketplace-related status functions can only be called by the authorized marketplace through the `onlyMarketplace` modifier.
+
+## `DrugMarketplace.sol`
+
+`DrugMarketplace` manages the sale of pharmaceutical NFTs.
+
+The contract uses OpenZeppelin's `ReentrancyGuard` to protect purchase operations against reentrancy attacks.
+
+The marketplace must be associated with a `DrugNFT` contract before listings can be created.
+
+### Main functions
+
+- `setDrugNFT(...)`
+- `unSetDrugNFT()`
+- `listDrug(...)`
+- `buyDrug(...)`
+- `cancelListing(...)`
+- `updatePrice(...)`
+- `getListing(...)`
+- `getPrice(...)`
+- `getSeller(...)`
+
+Only the owner of an NFT can create a listing for it.
+
+## Contract Interaction
+
+Before using the marketplace, the contracts must be configured as follows:
+
+1. The producer deploys `DrugNFT`.
+2. The marketplace contract is deployed.
+3. The producer registers the marketplace in `DrugNFT` using `setMarketplace`.
+4. The marketplace is configured with the address of `DrugNFT` using `setDrugNFT`.
+
+This creates a two-way authorization relationship:
+
+- `DrugNFT` authorizes `DrugMarketplace` to update sale-related NFT data and transfer tokens.
+- `DrugMarketplace` authorizes `DrugNFT` as the NFT collection it manages.
+
+The current implementation supports one producer and one NFT contract. A future version could support multiple pharmaceutical producers and multiple NFT collections.
+
+## Project Structure
+
+├── contracts/
+│   ├── DrugNFT.sol
+│   ├── DrugMarketplace.sol
+│   └── ... Solidity tests
+├── test/
+│   ├── DrugNFT.ts
+│   ├── DrugMarketplace.ts
+│   └── ...
+├── ignition/
+│   └── modules/
+├── hardhat.config.ts
+├── package.json
+└── README.md
+
+
+## Installation
+
+Clone the repository and install the dependencies:
+
+git clone https://github.com/ArianaBaci/NFT-Marketplace.git
+cd NFT-Marketplace.git
+npm install
+Compile the Contracts
+
+npx hardhat compile
+
+Run the complete test suite:
+
 npx hardhat test
-```
 
-You can also selectively run the Solidity or `node:test` tests:
+Run the TypeScript tests:
 
-```shell
-npx hardhat test solidity
 npx hardhat test nodejs
-```
 
-### Make a deployment to Sepolia
+Run the Solidity tests:
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
+npx hardhat test solidity
+Testing
 
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
-```
-
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
-
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
-
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
-
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-```
-
-After setting the variable, you can run the deployment with the Sepolia network:
-
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
